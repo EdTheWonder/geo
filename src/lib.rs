@@ -15,7 +15,9 @@ pub struct GeometricConstruction {
     pub circle_a: Circle,
     pub circle_b: Option<Circle>,
     pub points: ConstructionPoints,
-    pub intersections: Vec<Point>
+    pub intersections: Vec<Point>,
+    vesica_ratio: Option<f64>,
+    square_ratio: Option<f64>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -32,8 +34,8 @@ pub struct ConstructionPoints {
     pub c4: Option<Point>,
     pub a: Option<Point>,
     pub b: Option<Point>,
+    pub c: Option<Point>,
     pub d: Option<Point>,
-    pub e: Option<Point>,
     pub extended_lines: Vec<(Point, Point)>
 }
 
@@ -50,7 +52,9 @@ impl GeometricConstruction {
             circle_a,
             circle_b: None,
             points: ConstructionPoints::default(),
-            intersections: Vec::new()
+            intersections: Vec::new(),
+            vesica_ratio: None,
+            square_ratio: None,
         }
     }
 
@@ -81,6 +85,23 @@ impl GeometricConstruction {
 
         // Step 5: Find square vertices through line intersections
         self.construct_square_vertices();
+
+        // Store geometric properties during construction
+        if let (Some(p1), Some(p2)) = (self.points.p1, self.points.p2) {
+            self.vesica_ratio = Some(self.distance_to_line(
+                &p1, 
+                &self.circle_a.center,
+                &self.circle_b.as_ref().unwrap().center
+            ));
+            
+            let angles = [
+                self.angle_between_points(&p1, &self.circle_a.center, &p2),
+                self.angle_between_points(&p2, &self.circle_a.center, &p1),
+                self.angle_between_points(&p1, &self.circle_b.as_ref().unwrap().center, &p2),
+                self.angle_between_points(&p2, &self.circle_b.as_ref().unwrap().center, &p1),
+            ];
+            self.square_ratio = Some(angles[0]);
+        }
     }
 
     fn construct_arcs_from_p1(&mut self) {
@@ -267,62 +288,192 @@ impl GeometricConstruction {
             self.points.p1, self.points.p2, self.points.p3, self.points.p5,
             self.points.c1, self.points.c2, self.points.c3, self.points.c4
         ) {
-            // Construct lines for square vertices
-            // Line P1-P3 intersects with C4-C2 to form vertex A
+            // Vertex A: Where P1-P3 intersects C4-C2
             self.points.a = self.find_line_intersection(&p1, &p3, &c4, &c2);
             
-            // Line P1-P3 intersects with C1-C3 to form vertex B
+            // Vertex B: Where P1-P3 intersects C1-C3
             self.points.b = self.find_line_intersection(&p1, &p3, &c1, &c3);
             
-            // Line P5-P2 intersects with C4-C2 to form vertex D
+            // Vertex D: Where P5-P2 intersects C4-C2
             self.points.d = self.find_line_intersection(&p5, &p2, &c4, &c2);
             
-            // Line P5-P2 intersects with C1-C3 to form vertex E
-            self.points.e = self.find_line_intersection(&p5, &p2, &c1, &c3);
-
-            // Store the extended lines for visualization
-            self.points.extended_lines = vec![
-                (p1, p3),
-                (p5, p2),
-                (c1, c3),
-                (c4, c2)
-            ];
+            // Vertex E: Where P5-P2 intersects C1-C3
+            self.points.c = self.find_line_intersection(&p5, &p2, &c1, &c3);
         }
     }
 
     pub fn verify_square(&self) -> bool {
-        if let (Some(a), Some(b), Some(d), Some(e)) = (
-            self.points.a, self.points.b, self.points.d, self.points.e
+        if let (Some(a), Some(b), Some(c), Some(d)) = (
+            self.points.a, self.points.b, 
+            self.points.c, self.points.d
         ) {
             let epsilon = 1e-10;
             
-            // Check all sides are equal
+            // Use only compass comparisons
             let side1 = distance(&a, &b);
-            let side2 = distance(&b, &e);
-            let side3 = distance(&e, &d);
+            let side2 = distance(&b, &c);
+            let side3 = distance(&c, &d);
             let side4 = distance(&d, &a);
             
-            let sides_equal = (side1 - side2).abs() < epsilon
+            // Equal sides
+            let sides_equal = (side1 - side2).abs() < epsilon 
                 && (side2 - side3).abs() < epsilon
                 && (side3 - side4).abs() < epsilon;
+                
+            // Right angles via equal diagonals
+            let diag1 = distance(&a, &c);
+            let diag2 = distance(&b, &d);
+            let diagonals_equal = (diag1 - diag2).abs() < epsilon;
             
-            // Check angles are 90 degrees using dot product
-            let check_right_angle = |p1: &Point, p2: &Point, p3: &Point| -> bool {
-                let v1 = Point { x: p2.x - p1.x, y: p2.y - p1.y };
-                let v2 = Point { x: p3.x - p2.x, y: p3.y - p2.y };
-                let dot_product = v1.x * v2.x + v1.y * v2.y;
-                dot_product.abs() < epsilon
-            };
+            // Pythagorean verification
+            let sides_squared = side1.powi(2) + side2.powi(2);
+            let diagonal_squared = diag1.powi(2);
+            let right_angles = (sides_squared - diagonal_squared).abs() < epsilon;
             
-            let angles_right = check_right_angle(&a, &b, &e)
-                && check_right_angle(&b, &e, &d)
-                && check_right_angle(&e, &d, &a)
-                && check_right_angle(&d, &a, &b);
-            
-            sides_equal && angles_right
+            sides_equal && diagonals_equal && right_angles
         } else {
             false
         }
+    }
+
+    pub fn verify_vesica_piscis(&self) -> bool {
+        if let (Some(p1), Some(p2)) = (self.points.p1, self.points.p2) {
+            let epsilon = 1e-10;
+            
+            // Verify height of vesica piscis
+            let height = self.distance_to_line(&p1, &self.circle_a.center, 
+                                        &self.circle_b.as_ref().unwrap().center);
+            let expected_height = (3.0_f64).sqrt() / 2.0;
+            
+            // Verify 60° angle
+            let angle = self.angle_between_points(&p1, &self.circle_a.center, &p2);
+            let sixty_degrees = std::f64::consts::PI / 3.0;
+            
+            (height - expected_height).abs() < epsilon 
+                && (angle - sixty_degrees).abs() < epsilon
+        } else {
+            false
+        }
+    }
+
+    pub fn verify_quadrant_division(&self) -> bool {
+        if let (Some(c1), Some(c2), Some(c3), Some(c4)) = (
+            self.points.c1, self.points.c2, self.points.c3, self.points.c4
+        ) {
+            let epsilon = 1e-10;
+            let angle = self.angle_between_lines(&c1, &c2, &c3, &c4);
+            let right_angle = std::f64::consts::PI / 2.0;
+            
+            let quadrant_areas = self.calculate_quadrant_areas();
+            let quadrants_equal = quadrant_areas.windows(2)
+                .all(|w| (w[0] - w[1]).abs() < epsilon);
+            
+            (angle - right_angle).abs() < epsilon && quadrants_equal
+        } else {
+            false
+        }
+    }
+
+    fn distance_to_line(&self, point: &Point, line_p1: &Point, line_p2: &Point) -> f64 {
+        let base = distance(line_p1, line_p2);
+        let a = distance(point, line_p1);
+        let b = distance(point, line_p2);
+        let s = (a + b + base) / 2.0;
+        let area = (s * (s - a) * (s - b) * (s - base)).sqrt();
+        2.0 * area / base
+    }
+
+    fn angle_between_points(&self, p1: &Point, center: &Point, p2: &Point) -> f64 {
+        let v1 = Point { 
+            x: p1.x - center.x, 
+            y: p1.y - center.y 
+        };
+        let v2 = Point { 
+            x: p2.x - center.x, 
+            y: p2.y - center.y 
+        };
+        
+        let dot_product = v1.x * v2.x + v1.y * v2.y;
+        let magnitudes = ((v1.x.powi(2) + v1.y.powi(2)) * 
+                         (v2.x.powi(2) + v2.y.powi(2))).sqrt();
+        
+        (dot_product / magnitudes).acos()
+    }
+
+    fn angle_between_lines(&self, p1: &Point, p2: &Point, p3: &Point, p4: &Point) -> f64 {
+        // Get vectors for both lines
+        let v1 = Point { 
+            x: p2.x - p1.x, 
+            y: p2.y - p1.y 
+        };
+        let v2 = Point { 
+            x: p4.x - p3.x, 
+            y: p4.y - p3.y 
+        };
+        
+        // Calculate angle using dot product
+        let dot_product = v1.x * v2.x + v1.y * v2.y;
+        let magnitudes = ((v1.x.powi(2) + v1.y.powi(2)) * 
+                         (v2.x.powi(2) + v2.y.powi(2))).sqrt();
+        
+        (dot_product / magnitudes).acos()
+    }
+
+    fn calculate_quadrant_areas(&self) -> Vec<f64> {
+        if let (Some(c1), Some(c2), Some(c3), Some(c4)) = (
+            self.points.c1, self.points.c2, 
+            self.points.c3, self.points.c4
+        ) {
+            let center = self.circle_a.center;
+            let r = self.circle_a.radius;
+            
+            // Calculate areas of the four quadrants formed by C1-C2 and C3-C4
+            let angles = [
+                self.angle_between_points(&c1, &center, &c3),
+                self.angle_between_points(&c3, &center, &c2),
+                self.angle_between_points(&c2, &center, &c4),
+                self.angle_between_points(&c4, &center, &c1),
+            ];
+            
+            angles.iter()
+                .map(|angle| 0.5 * r.powi(2) * angle)
+                .collect()
+        } else {
+            vec![]
+        }
+    }
+
+    pub fn verify_diagonal_alignment(&self) -> bool {
+        if let (Some(a), Some(b), Some(c), Some(d)) = (
+            self.points.a, self.points.b, 
+            self.points.c, self.points.d
+        ) {
+            let epsilon = 1e-10;
+
+            // 1. Check diagonal lengths are equal
+            let diagonal_ac = distance(&a, &c);
+            let diagonal_bd = distance(&b, &d);
+            if (diagonal_ac - diagonal_bd).abs() > epsilon {
+                return false;
+            }
+
+            // 2. Check each triangle is right-angled using Pythagorean theorem
+            let side_ab = distance(&a, &b);
+            let side_bc = distance(&b, &c);
+            let hypotenuse = diagonal_ac;
+            
+            let sides_squared = side_ab.powi(2) + side_bc.powi(2);
+            let hypotenuse_squared = hypotenuse.powi(2);
+
+            (sides_squared - hypotenuse_squared).abs() < epsilon
+        } else {
+            false
+        }
+    }
+
+    pub fn point_on_line(&self, point: &Point, line_start: &Point, line_end: &Point) -> bool {
+        let epsilon = 1e-10;
+        self.distance_to_line(point, line_start, line_end) < epsilon
     }
 }
 

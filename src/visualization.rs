@@ -149,16 +149,16 @@ pub fn draw_construction(construction: &GeometricConstruction) -> Result<(), Box
     }
 
     // Draw the square with thicker lines
-    if let (Some(a), Some(b), Some(d), Some(e)) = (
+    if let (Some(a), Some(b), Some(d), Some(c)) = (
         construction.points.a,
         construction.points.b,
         construction.points.d,
-        construction.points.e
+        construction.points.c
     ) {
         let square_points = vec![
             (a.x as f32, a.y as f32),
             (b.x as f32, b.y as f32),
-            (e.x as f32, e.y as f32),
+            (c.x as f32, c.y as f32),
             (d.x as f32, d.y as f32),
             (a.x as f32, a.y as f32),
         ];
@@ -181,6 +181,10 @@ pub fn draw_construction(construction: &GeometricConstruction) -> Result<(), Box
         (construction.points.c2, "C₂", &GREEN),
         (construction.points.c3, "C₃", &GREEN),
         (construction.points.c4, "C₄", &GREEN),
+        (construction.points.a, "A", &RGBColor(0, 255, 0)),
+        (construction.points.b, "B", &RGBColor(0, 255, 0)),
+        (construction.points.d, "D", &RGBColor(0, 255, 0)),
+        (construction.points.c, "C", &RGBColor(0, 255, 0)),
     ];
 
     for (point_opt, label, color) in construction_points.iter() {
