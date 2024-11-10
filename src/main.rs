@@ -1,5 +1,4 @@
-use geometric_construction::GeometricConstruction;
-mod visualization;
+use geometric_construction::{GeometricConstruction, visualization};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut construction = GeometricConstruction::new(1.0);

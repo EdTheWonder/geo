@@ -11,32 +11,33 @@ pub struct Circle {
 }
 
 #[derive(Debug, Clone)]
-pub struct Line {
-    start: Point,
-    end: Point
-}
-
-#[derive(Debug)]
 pub struct GeometricConstruction {
-    circle_a: Circle,
-    circle_b: Option<Circle>,
-    points: ConstructionPoints,
-    intersections: Vec<Point>
+    pub circle_a: Circle,
+    pub circle_b: Option<Circle>,
+    pub points: ConstructionPoints,
+    pub intersections: Vec<Point>
 }
 
-#[derive(Debug, Default)]
-struct ConstructionPoints {
-    p1: Option<Point>,
-    p2: Option<Point>,
-    p3: Option<Point>,
-    p4: Option<Point>,
-    p5: Option<Point>,
-    p6: Option<Point>,
-    c1: Option<Point>,
-    c2: Option<Point>,
-    c3: Option<Point>,
-    c4: Option<Point>
+#[derive(Debug, Default, Clone)]
+pub struct ConstructionPoints {
+    pub p1: Option<Point>,
+    pub p2: Option<Point>,
+    pub p3: Option<Point>,
+    pub p4: Option<Point>,
+    pub p5: Option<Point>,
+    pub p6: Option<Point>,
+    pub c1: Option<Point>,
+    pub c2: Option<Point>,
+    pub c3: Option<Point>,
+    pub c4: Option<Point>,
+    pub a: Option<Point>,
+    pub b: Option<Point>,
+    pub d: Option<Point>,
+    pub e: Option<Point>,
+    pub extended_lines: Vec<(Point, Point)>
 }
+
+pub mod visualization;
 
 impl GeometricConstruction {
     pub fn new(radius: f64) -> Self {
@@ -54,13 +55,14 @@ impl GeometricConstruction {
     }
 
     pub fn construct(&mut self) {
-        // Initial circle intersection defines all other points
-        let initial_circle = Circle {
+        // Step 1: Create Circle B at distance r from center
+        let circle_b = Circle {
             center: Point { x: self.circle_a.radius, y: 0.0 },
             radius: self.circle_a.radius
         };
-        self.circle_b = Some(initial_circle);
+        self.circle_b = Some(circle_b);
 
+        // Step 2: Find intersection points P1 and P2
         if let Some(circle_b) = &self.circle_b {
             let intersections = self.find_circle_intersections(&self.circle_a, circle_b);
             if intersections.len() == 2 {
@@ -69,158 +71,152 @@ impl GeometricConstruction {
             }
         }
 
-        self.construct_arcs();
-        self.construct_center_lines();
-        self.construct_square();
+        // Step 3: Construct arcs from P1 and P2
+        self.construct_arcs_from_p1();  // Creates P3 and P4
+        self.construct_arcs_from_p2();  // Creates P5 and P6
+
+        // Step 4: Construct lines through center
+        self.construct_center_lines_from_p4();  // Creates C1 and C2
+        self.construct_center_lines_from_p6();  // Creates C3 and C4
+
+        // Step 5: Find square vertices through line intersections
+        self.construct_square_vertices();
     }
 
+    fn construct_arcs_from_p1(&mut self) {
+        if let Some(p1) = self.points.p1 {
+            // Arc intersecting Circle A
+            let circle_p1_a = Circle { center: p1, radius: self.circle_a.radius };
+            let intersections_a = self.find_circle_intersections(&circle_p1_a, &self.circle_a);
+            
+            // Arc intersecting Circle B
+            if let Some(circle_b) = &self.circle_b {
+                let circle_p1_b = Circle { center: p1, radius: self.circle_a.radius };
+                let intersections_b = self.find_circle_intersections(&circle_p1_b, circle_b);
+                
+                if intersections_a.len() == 2 && intersections_b.len() == 2 {
+                    // P3 is the leftmost intersection with Circle A
+                    self.points.p3 = Some(if intersections_a[0].x < intersections_a[1].x {
+                        intersections_a[0]
+                    } else {
+                        intersections_a[1]
+                    });
+                    
+                    // P4 is the rightmost intersection with Circle B
+                    self.points.p4 = Some(if intersections_b[0].x > intersections_b[1].x {
+                        intersections_b[0]
+                    } else {
+                        intersections_b[1]
+                    });
+                }
+            }
+        }
+    }
 
+    fn construct_arcs_from_p2(&mut self) {
+        if let (Some(p2), Some(circle_b)) = (self.points.p2, &self.circle_b) {
+            // Arc intersecting Circle A for P5
+            let circle_p2_a = Circle { center: p2, radius: self.circle_a.radius };
+            let intersections_a = self.find_circle_intersections(&circle_p2_a, &self.circle_a);
+            
+            if intersections_a.len() == 2 {
+                // P5 is the leftmost intersection with Circle A
+                self.points.p5 = Some(if intersections_a[0].x < intersections_a[1].x {
+                    intersections_a[0]
+                } else {
+                    intersections_a[1]
+                });
+            }
+            
+            // Arc intersecting Circle B for P6
+            let circle_p2_b = Circle { center: p2, radius: self.circle_a.radius };
+            let intersections_b = self.find_circle_intersections(&circle_p2_b, circle_b);
+            
+            if intersections_b.len() == 2 {
+                // P6 is the rightmost intersection with Circle B
+                self.points.p6 = Some(if intersections_b[0].x > intersections_b[1].x {
+                    intersections_b[0]
+                } else {
+                    intersections_b[1]
+                });
+            }
+        }
+    }
+
+    fn construct_center_lines_from_p4(&mut self) {
+        if let Some(p4) = self.points.p4 {
+            let center = self.circle_a.center;
+            // Find intersections of line through center and P4 with Circle A
+            let d = distance(&center, &p4);
+            let scale = self.circle_a.radius / d;
+            
+            self.points.c1 = Some(Point {
+                x: center.x + (p4.x - center.x) * scale,
+                y: center.y + (p4.y - center.y) * scale
+            });
+            
+            self.points.c2 = Some(Point {
+                x: center.x - (p4.x - center.x) * scale,
+                y: center.y - (p4.y - center.y) * scale
+            });
+        }
+    }
+
+    fn construct_center_lines_from_p6(&mut self) {
+        if let Some(p6) = self.points.p6 {
+            let center = self.circle_a.center;
+            
+            // Vector from center to P6
+            let vector = Point {
+                x: p6.x - center.x,
+                y: p6.y - center.y
+            };
+            
+            // Normalize and scale to circle radius
+            let length = (vector.x.powi(2) + vector.y.powi(2)).sqrt();
+            let scale = self.circle_a.radius / length;
+            
+            // C3 and C4 are on Circle A in line with P6 through O
+            self.points.c3 = Some(Point {
+                x: center.x + vector.x * scale,
+                y: center.y + vector.y * scale
+            });
+            
+            self.points.c4 = Some(Point {
+                x: center.x - vector.x * scale,
+                y: center.y - vector.y * scale
+            });
+        }
+    }
 
     fn find_circle_intersections(&self, circle1: &Circle, circle2: &Circle) -> Vec<Point> {
-        let dx = circle2.center.x - circle1.center.x;
-        let dy = circle2.center.y - circle1.center.y;
-        let d = (dx * dx + dy * dy).sqrt();
+        let d = distance(&circle1.center, &circle2.center);
         
+        // Circles don't intersect or are identical
         if d > circle1.radius + circle2.radius || d < (circle1.radius - circle2.radius).abs() {
             return Vec::new();
         }
         
-        let a = (circle1.radius * circle1.radius - circle2.radius * circle2.radius + d * d) / (2.0 * d);
-        let h = (circle1.radius * circle1.radius - a * a).sqrt();
+        let a = (circle1.radius.powi(2) - circle2.radius.powi(2) + d.powi(2)) / (2.0 * d);
+        let h = (circle1.radius.powi(2) - a.powi(2)).sqrt();
         
-        let x2 = circle1.center.x + (dx * a) / d;
-        let y2 = circle1.center.y + (dy * a) / d;
+        let p2 = Point {
+            x: circle1.center.x + a * (circle2.center.x - circle1.center.x) / d,
+            y: circle1.center.y + a * (circle2.center.y - circle1.center.y) / d
+        };
         
-        vec![
+        let intersections = vec![
             Point {
-                x: x2 + (h * dy) / d,
-                y: y2 - (h * dx) / d
+                x: p2.x + h * (circle2.center.y - circle1.center.y) / d,
+                y: p2.y - h * (circle2.center.x - circle1.center.x) / d
             },
             Point {
-                x: x2 - (h * dy) / d,
-                y: y2 + (h * dx) / d
+                x: p2.x - h * (circle2.center.y - circle1.center.y) / d,
+                y: p2.y + h * (circle2.center.x - circle1.center.x) / d
             }
-        ]
-    }
-
-    fn find_line_circle_intersection(&self, line: &Line, circle: &Circle) -> Vec<Point> {
-        let dx = line.end.x - line.start.x;
-        let dy = line.end.y - line.start.y;
-        let a = dx * dx + dy * dy;
-        let b = 2.0 * (dx * (line.start.x - circle.center.x) + 
-                      dy * (line.start.y - circle.center.y));
-        let c = circle.center.x * circle.center.x + 
-                circle.center.y * circle.center.y +
-                line.start.x * line.start.x +
-                line.start.y * line.start.y -
-                2.0 * (circle.center.x * line.start.x + 
-                       circle.center.y * line.start.y) -
-                circle.radius * circle.radius;
+        ];
         
-        let discriminant = b * b - 4.0 * a * c;
-        if discriminant < 0.0 {
-            return Vec::new();
-        }
-        
-        let t1 = (-b + discriminant.sqrt()) / (2.0 * a);
-        let t2 = (-b - discriminant.sqrt()) / (2.0 * a);
-        
-        vec![
-            Point {
-                x: line.start.x + t1 * dx,
-                y: line.start.y + t1 * dy
-            },
-            Point {
-                x: line.start.x + t2 * dx,
-                y: line.start.y + t2 * dy
-            }
-        ]
-    }
-
-    fn construct_arcs(&mut self) {
-        if let (Some(p1), Some(p2)) = (self.points.p1, self.points.p2) {
-            // Create circles centered at P1 and P2 with radius equal to original circle
-            let circle_p1 = Circle { center: p1, radius: self.circle_a.radius };
-            let circle_p2 = Circle { center: p2, radius: self.circle_a.radius };
-            
-            // Find intersections with original circle
-            let p1_intersections = self.find_circle_intersections(&self.circle_a, &circle_p1);
-            let p2_intersections = self.find_circle_intersections(&self.circle_a, &circle_p2);
-            
-            if p1_intersections.len() == 2 {
-                self.points.p3 = Some(p1_intersections[0]);
-                self.points.p4 = Some(p1_intersections[1]);
-            }
-            
-            if p2_intersections.len() == 2 {
-                self.points.p5 = Some(p2_intersections[0]);
-                self.points.p6 = Some(p2_intersections[1]);
-            }
-        }
-    }
-
-    fn construct_center_lines(&mut self) {
-        if let (Some(p4), Some(p6)) = (self.points.p4, self.points.p6) {
-            // Line through P4 and center
-            let line1 = Line { start: p4, end: self.circle_a.center };
-            let intersections1 = self.find_line_circle_intersection(&line1, &self.circle_a);
-            if intersections1.len() == 2 {
-                self.points.c1 = Some(intersections1[0]);
-                self.points.c2 = Some(intersections1[1]);
-            }
-
-            // Line through P6 and center
-            let line2 = Line { start: p6, end: self.circle_a.center };
-            let intersections2 = self.find_line_circle_intersection(&line2, &self.circle_a);
-            if intersections2.len() == 2 {
-                self.points.c3 = Some(intersections2[0]);
-                self.points.c4 = Some(intersections2[1]);
-            }
-        }
-    }
-
-    fn construct_square(&mut self) {
-        if let (Some(p1), Some(p2), Some(p3), Some(_p4), Some(p5), Some(_p6)) = (
-            self.points.p1, self.points.p2, 
-            self.points.p3, self.points.p4,
-            self.points.p5, self.points.p6
-        ) {
-            // Calculate intersection points between lines
-            let _line_p1_p3 = Line { start: p1, end: p3 };
-            let _line_p2_p5 = Line { start: p2, end: p5 };
-            
-            // Store intersections for verification
-            if let (Some(c1), Some(c2), Some(c3), Some(c4)) = (
-                self.points.c1, self.points.c2,
-                self.points.c3, self.points.c4
-            ) {
-                self.intersections = vec![c1, c2, c3, c4];
-            }
-        }
-    }
-
-    pub fn verify_square(&self) -> bool {
-        if let (Some(p1), Some(p2), Some(p3), Some(p4)) = (
-            &self.points.c1, &self.points.c2, 
-            &self.points.c3, &self.points.c4) {
-            
-            let d1 = distance(p1, p2);
-            let d2 = distance(p2, p3);
-            let d3 = distance(p3, p4);
-            let d4 = distance(p4, p1);
-            
-            let diag1 = distance(p1, p3);
-            let diag2 = distance(p2, p4);
-            
-            let epsilon = 1e-10;
-            
-            (d1 - d2).abs() < epsilon &&
-            (d2 - d3).abs() < epsilon &&
-            (d3 - d4).abs() < epsilon &&
-            (diag1 - diag2).abs() < epsilon
-        } else {
-            false
-        }
+        intersections
     }
 
     pub fn get_points(&self) -> Option<Vec<Point>> {
@@ -242,13 +238,98 @@ impl GeometricConstruction {
             Some(points)
         }
     }
+
+    fn find_line_intersection(&self, p1: &Point, p2: &Point, p3: &Point, p4: &Point) -> Option<Point> {
+        // Line 1 represented as a1x + b1y = c1
+        let a1 = p2.y - p1.y;
+        let b1 = p1.x - p2.x;
+        let c1 = a1 * p1.x + b1 * p1.y;
+
+        // Line 2 represented as a2x + b2y = c2
+        let a2 = p4.y - p3.y;
+        let b2 = p3.x - p4.x;
+        let c2 = a2 * p3.x + b2 * p3.y;
+
+        let determinant = a1 * b2 - a2 * b1;
+
+        if determinant.abs() < 1e-10 {
+            None // Lines are parallel
+        } else {
+            Some(Point {
+                x: (b2 * c1 - b1 * c2) / determinant,
+                y: (a1 * c2 - a2 * c1) / determinant,
+            })
+        }
+    }
+
+    fn construct_square_vertices(&mut self) {
+        if let (Some(p1), Some(p2), Some(p3), Some(p5), Some(c1), Some(c2), Some(c3), Some(c4)) = (
+            self.points.p1, self.points.p2, self.points.p3, self.points.p5,
+            self.points.c1, self.points.c2, self.points.c3, self.points.c4
+        ) {
+            // Construct lines for square vertices
+            // Line P1-P3 intersects with C4-C2 to form vertex A
+            self.points.a = self.find_line_intersection(&p1, &p3, &c4, &c2);
+            
+            // Line P1-P3 intersects with C1-C3 to form vertex B
+            self.points.b = self.find_line_intersection(&p1, &p3, &c1, &c3);
+            
+            // Line P5-P2 intersects with C4-C2 to form vertex D
+            self.points.d = self.find_line_intersection(&p5, &p2, &c4, &c2);
+            
+            // Line P5-P2 intersects with C1-C3 to form vertex E
+            self.points.e = self.find_line_intersection(&p5, &p2, &c1, &c3);
+
+            // Store the extended lines for visualization
+            self.points.extended_lines = vec![
+                (p1, p3),
+                (p5, p2),
+                (c1, c3),
+                (c4, c2)
+            ];
+        }
+    }
+
+    pub fn verify_square(&self) -> bool {
+        if let (Some(a), Some(b), Some(d), Some(e)) = (
+            self.points.a, self.points.b, self.points.d, self.points.e
+        ) {
+            let epsilon = 1e-10;
+            
+            // Check all sides are equal
+            let side1 = distance(&a, &b);
+            let side2 = distance(&b, &e);
+            let side3 = distance(&e, &d);
+            let side4 = distance(&d, &a);
+            
+            let sides_equal = (side1 - side2).abs() < epsilon
+                && (side2 - side3).abs() < epsilon
+                && (side3 - side4).abs() < epsilon;
+            
+            // Check angles are 90 degrees using dot product
+            let check_right_angle = |p1: &Point, p2: &Point, p3: &Point| -> bool {
+                let v1 = Point { x: p2.x - p1.x, y: p2.y - p1.y };
+                let v2 = Point { x: p3.x - p2.x, y: p3.y - p2.y };
+                let dot_product = v1.x * v2.x + v1.y * v2.y;
+                dot_product.abs() < epsilon
+            };
+            
+            let angles_right = check_right_angle(&a, &b, &e)
+                && check_right_angle(&b, &e, &d)
+                && check_right_angle(&e, &d, &a)
+                && check_right_angle(&d, &a, &b);
+            
+            sides_equal && angles_right
+        } else {
+            false
+        }
+    }
 }
 
 pub fn distance(p1: &Point, p2: &Point) -> f64 {
-    let dx = p2.x - p1.x;
-    let dy = p2.y - p1.y;
-    (dx * dx + dy * dy).sqrt()
+    ((p2.x - p1.x).powi(2) + (p2.y - p1.y).powi(2)).sqrt()
 }
 
 #[cfg(test)]
 mod tests;
+
