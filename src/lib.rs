@@ -472,8 +472,19 @@ impl GeometricConstruction {
     }
 
     pub fn point_on_line(&self, point: &Point, line_start: &Point, line_end: &Point) -> bool {
-        let epsilon = 1e-10;
-        self.distance_to_line(point, line_start, line_end) < epsilon
+        // Cross product should be zero for collinear points
+        let cross_product = (point.x - line_start.x) * (line_end.y - line_start.y) -
+                           (point.y - line_start.y) * (line_end.x - line_start.x);
+        cross_product.abs() < 1e-10
+    }
+
+    pub fn point_on_circle(&self, point: &Point, circle: &Circle) -> bool {
+        // Use squared distances to avoid floating point errors from sqrt
+        let dx = point.x - circle.center.x;
+        let dy = point.y - circle.center.y;
+        let distance_squared = dx * dx + dy * dy;
+        let radius_squared = circle.radius * circle.radius;
+        (distance_squared - radius_squared).abs() < 1e-10
     }
 }
 
