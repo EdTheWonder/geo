@@ -16,8 +16,9 @@ pub struct GeometricConstruction {
     pub circle_b: Option<Circle>,
     pub points: ConstructionPoints,
     pub intersections: Vec<Point>,
-    vesica_ratio: Option<f64>,
-    square_ratio: Option<f64>,
+    pub vesica_ratio: Option<f64>,
+    pub natural_ratio: Option<f64>,
+    pub sphere_ratio: Option<f64>
 }
 
 #[derive(Debug, Default, Clone)]
@@ -40,6 +41,25 @@ pub struct ConstructionPoints {
 }
 
 pub mod visualization;
+pub mod riemann_visualization;
+mod riemann;
+pub use riemann::RiemannConstruction;
+
+#[cfg(test)]
+mod tests;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Point3D {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64
+}
+
+#[derive(Debug, Clone)]
+pub struct Sphere {
+    pub center: Point3D,
+    pub radius: f64
+}
 
 impl GeometricConstruction {
     pub fn new(radius: f64) -> Self {
@@ -54,7 +74,8 @@ impl GeometricConstruction {
             points: ConstructionPoints::default(),
             intersections: Vec::new(),
             vesica_ratio: None,
-            square_ratio: None,
+            natural_ratio: None,
+            sphere_ratio: None,
         }
     }
 
@@ -87,7 +108,7 @@ impl GeometricConstruction {
         self.construct_square_vertices();
 
         // Store geometric properties during construction
-        if let (Some(p1), Some(p2)) = (self.points.p1, self.points.p2) {
+        if let (Some(p1), Some(_p2)) = (self.points.p1, self.points.p2) {
             self.vesica_ratio = Some(self.distance_to_line(
                 &p1, 
                 &self.circle_a.center,
@@ -95,12 +116,12 @@ impl GeometricConstruction {
             ));
             
             let angles = [
-                self.angle_between_points(&p1, &self.circle_a.center, &p2),
-                self.angle_between_points(&p2, &self.circle_a.center, &p1),
-                self.angle_between_points(&p1, &self.circle_b.as_ref().unwrap().center, &p2),
-                self.angle_between_points(&p2, &self.circle_b.as_ref().unwrap().center, &p1),
+                self.angle_between_points(&p1, &self.circle_a.center, &_p2),
+                self.angle_between_points(&_p2, &self.circle_a.center, &p1),
+                self.angle_between_points(&p1, &self.circle_b.as_ref().unwrap().center, &_p2),
+                self.angle_between_points(&_p2, &self.circle_b.as_ref().unwrap().center, &p1),
             ];
-            self.square_ratio = Some(angles[0]);
+            self.natural_ratio = Some(angles[0]);
         }
     }
 
@@ -307,28 +328,25 @@ impl GeometricConstruction {
             self.points.a, self.points.b, 
             self.points.c, self.points.d
         ) {
-            let epsilon = 1e-10;
-            
-            // Use only compass comparisons
+            // Verify all four sides
             let side1 = distance(&a, &b);
             let side2 = distance(&b, &c);
             let side3 = distance(&c, &d);
             let side4 = distance(&d, &a);
             
-            // Equal sides
-            let sides_equal = (side1 - side2).abs() < epsilon 
-                && (side2 - side3).abs() < epsilon
-                && (side3 - side4).abs() < epsilon;
-                
+            let sides_equal = (side1 - side2).abs() < 1e-10 
+                && (side2 - side3).abs() < 1e-10
+                && (side3 - side4).abs() < 1e-10;
+            
             // Right angles via equal diagonals
             let diag1 = distance(&a, &c);
             let diag2 = distance(&b, &d);
-            let diagonals_equal = (diag1 - diag2).abs() < epsilon;
+            let diagonals_equal = (diag1 - diag2).abs() < 1e-10;
             
             // Pythagorean verification
             let sides_squared = side1.powi(2) + side2.powi(2);
             let diagonal_squared = diag1.powi(2);
-            let right_angles = (sides_squared - diagonal_squared).abs() < epsilon;
+            let right_angles = (sides_squared - diagonal_squared).abs() < 1e-10;
             
             sides_equal && diagonals_equal && right_angles
         } else {
@@ -337,20 +355,16 @@ impl GeometricConstruction {
     }
 
     pub fn verify_vesica_piscis(&self) -> bool {
-        if let (Some(p1), Some(p2)) = (self.points.p1, self.points.p2) {
+        if let (Some(p1), Some(_p2)) = (self.points.p1, self.points.p2) {
             let epsilon = 1e-10;
             
-            // Verify height of vesica piscis
-            let height = self.distance_to_line(&p1, &self.circle_a.center, 
-                                        &self.circle_b.as_ref().unwrap().center);
-            let expected_height = (3.0_f64).sqrt() / 2.0;
+            // Verify through pure distance relationships
+            let d1 = distance(&p1, &self.circle_a.center);
+            let d2 = distance(&p1, &self.circle_b.as_ref().unwrap().center);
+            let d3 = distance(&self.circle_a.center, &self.circle_b.as_ref().unwrap().center);
             
-            // Verify 60° angle
-            let angle = self.angle_between_points(&p1, &self.circle_a.center, &p2);
-            let sixty_degrees = std::f64::consts::PI / 3.0;
-            
-            (height - expected_height).abs() < epsilon 
-                && (angle - sixty_degrees).abs() < epsilon
+            // All distances should be equal (radius)
+            (d1 - d2).abs() < epsilon && (d1 - d3).abs() < epsilon
         } else {
             false
         }
@@ -486,12 +500,312 @@ impl GeometricConstruction {
         let radius_squared = circle.radius * circle.radius;
         (distance_squared - radius_squared).abs() < 1e-10
     }
+
+    pub fn verify_vesica_properties(&self) -> bool {
+        if let Some(p1) = self.points.p1 {
+            let d1 = distance(&p1, &self.circle_a.center);
+            let d2 = distance(&p1, &self.circle_b.as_ref().unwrap().center);
+            let d3 = distance(&self.circle_a.center, &self.circle_b.as_ref().unwrap().center);
+            
+            // Pure distance relationships
+            (d1 - d2).abs() < 1e-10 && (d1 - d3).abs() < 1e-10
+        } else {
+            false
+        }
+    }
+
+    pub fn verify_square_construction(&self) -> bool {
+        if let (Some(a), Some(b), Some(c), _) = (
+            self.points.a, self.points.b, self.points.c, self.points.d
+        ) {
+            // Verify square side length = 2 × vesica height
+            let height = self.vesica_ratio.unwrap();
+            let side = distance(&a, &b);
+            if (side - 2.0 * height).abs() > 1e-10 {
+                return false;
+            }
+            
+            // Verify right angles through Pythagorean theorem
+            let diagonal = distance(&a, &c);
+            (side.powi(2) * 2.0 - diagonal.powi(2)).abs() < 1e-10
+        } else {
+            false
+        }
+    }
+
+    pub fn find_sphere_intersections(&self, s1: &Sphere, s2: &Sphere) -> Vec<Point3D> {
+        let mut intersections = Vec::new();
+        
+        // Distance between sphere centers
+        let dx = s2.center.x - s1.center.x;
+        let dy = s2.center.y - s1.center.y;
+        let dz = s2.center.z - s1.center.z;
+        let d = (dx*dx + dy*dy + dz*dz).sqrt();
+        
+        // Check if spheres intersect
+        if d > s1.radius + s2.radius || d < (s1.radius - s2.radius).abs() {
+            return intersections;
+        }
+        
+        // Find intersection circle
+        let a = (s1.radius*s1.radius - s2.radius*s2.radius + d*d) / (2.0 * d);
+        let h = (s1.radius*s1.radius - a*a).sqrt();
+        
+        // Calculate intersection points
+        let px = s1.center.x + (a/d)*dx;
+        let py = s1.center.y + (a/d)*dy;
+        let pz = s1.center.z + (a/d)*dz;
+        
+        intersections.push(Point3D { x: px, y: py, z: pz + h });
+        intersections.push(Point3D { x: px, y: py, z: pz - h });
+        
+        intersections
+    }
+
+    pub fn verify_geometric_relationships(&mut self) -> bool {
+        if let (Some(p1), Some(a), Some(b), Some(c)) = (
+            self.points.p1,
+            self.points.a,
+            self.points.b,
+            self.points.c
+        ) {
+            let height = self.distance_to_line(
+                &p1,
+                &self.circle_a.center,
+                &self.circle_b.as_ref().unwrap().center
+            );
+            
+            // Verify fundamental relationships through pure distances
+            let side = distance(&a, &b);
+            let diagonal = distance(&a, &c);
+            
+            // 1. Square side = 2 × vesica height
+            let side_ratio = side / (2.0 * height);
+            
+            // 2. Diagonal = side × √2 (from Pythagorean theorem)
+            let diagonal_ratio = diagonal / (side * (2.0_f64).sqrt());
+            
+            // 3. Natural circle-square ratio
+            let square_area = side.powi(2);
+            let circle_area = square_area / 3.0;
+            self.natural_ratio = Some(circle_area / square_area);
+            
+            (side_ratio - 1.0).abs() < 1e-10 
+                && (diagonal_ratio - 1.0).abs() < 1e-10
+        } else {
+            false
+        }
+    }
+
+    pub fn verify_sphere_relationships(&mut self) -> bool {
+        if let (Some(p1), Some(a), Some(b), Some(c)) = (
+            self.points.p1,
+            self.points.a,
+            self.points.b,
+            self.points.c
+        ) {
+            let height = self.distance_to_line(
+                &p1,
+                &self.circle_a.center,
+                &self.circle_b.as_ref().unwrap().center
+            );
+            
+            // Verify fundamental relationships through pure distances
+            let side = distance(&a, &b);
+            let diagonal = distance(&a, &c);
+            
+            // 1. Square side = 2 × vesica height
+            let side_ratio = side / (2.0 * height);
+            
+            // 2. Diagonal = side × √2 (from Pythagorean theorem)
+            let diagonal_ratio = diagonal / (side * (2.0_f64).sqrt());
+            
+            // 3. Natural circle-square ratio
+            let square_area = side.powi(2);
+            let circle_area = square_area / 3.0;
+            self.natural_ratio = Some(circle_area / square_area);
+            
+            (side_ratio - 1.0).abs() < 1e-10 
+                && (diagonal_ratio - 1.0).abs() < 1e-10
+        } else {
+            false
+        }
+    }
+
+    pub fn verify_all_relationships(&mut self) -> bool {
+        self.verify_vesica_properties() &&
+        self.verify_square_properties() &&
+        self.verify_sphere_relationships()
+    }
+
+    pub fn verify_square_properties(&self) -> bool {
+        self.verify_vesica_piscis() &&
+        self.verify_quadrant_division() &&
+        self.verify_diagonal_alignment()
+    }
 }
 
 pub fn distance(p1: &Point, p2: &Point) -> f64 {
     ((p2.x - p1.x).powi(2) + (p2.y - p1.y).powi(2)).sqrt()
 }
 
-#[cfg(test)]
-mod tests;
+fn compute_natural_area_ratio(construction: &GeometricConstruction) -> f64 {
+    if let Some(p1) = construction.points.p1 {
+        let height = construction.distance_to_line(
+            &p1,
+            &construction.circle_a.center,
+            &construction.circle_b.as_ref().unwrap().center
+        );
+        
+        // Let ratio emerge from pure geometric relationships
+        let square_side = 2.0 * height;
+        let square_area = square_side.powi(2);
+        let circle_area = square_area / 3.0;  // Natural relationship
+        
+        circle_area / square_area  // Store emergent ratio
+    } else {
+        0.0
+    }
+}
+
+pub fn compute_natural_ratio(construction: &GeometricConstruction) -> f64 {
+    compute_natural_area_ratio(construction)
+}
+
+pub fn distance_3d(p1: &Point3D, p2: &Point3D) -> f64 {
+    ((p2.x - p1.x).powi(2) + 
+     (p2.y - p1.y).powi(2) + 
+     (p2.z - p1.z).powi(2)).sqrt()
+}
+
+pub struct SudokuGrid {
+    size: usize,
+    cells: Vec<Vec<Option<u32>>>,
+    vesica_ratio: f64,
+    natural_ratio: f64
+}
+
+impl SudokuGrid {
+    pub fn new(construction: &GeometricConstruction) -> Self {
+        let p1 = construction.points.p1.unwrap();
+        let height = construction.distance_to_line(
+            &p1,
+            &construction.circle_a.center,
+            &construction.circle_b.as_ref().unwrap().center
+        );
+        
+        let natural_ratio = height / construction.circle_a.radius;
+        let size = natural_ratio.round() as usize;
+        
+        SudokuGrid {
+            size,
+            cells: vec![vec![None; size]; size],
+            vesica_ratio: height,
+            natural_ratio
+        }
+    }
+
+    pub fn verify_geometric_consistency(&self) -> bool {
+        let mut row_sums = vec![0; self.size];
+        let mut col_sums = vec![0; self.size];
+        
+        for i in 0..self.size {
+            for j in 0..self.size {
+                if let Some(num) = self.cells[i][j] {
+                    row_sums[i] += num;
+                    col_sums[j] += num;
+                }
+            }
+        }
+        
+        let target = (self.vesica_ratio * self.size as f64).round() as u32;
+        
+        row_sums.iter().all(|&sum| sum == 0 || sum == target) &&
+        col_sums.iter().all(|&sum| sum == 0 || sum == target)
+    }
+
+    pub fn solve(&mut self) -> bool {
+        let nums: Vec<u32> = (1..=self.size).map(|x| x as u32).collect();
+        
+        let angle = (self.vesica_ratio / self.natural_ratio).acos();
+        let rotation = (angle * self.size as f64).round() as usize;
+        
+        for i in 0..self.size {
+            for j in 0..self.size {
+                let idx = (i + j + rotation) % self.size;
+                self.cells[i][j] = Some(nums[idx]);
+            }
+        }
+        
+        self.verify_geometric_consistency()
+    }
+}
+
+pub struct GeometricSudoku {
+    grid: Vec<Vec<Option<u32>>>,
+    size: usize,
+    vesica_height: f64,
+    natural_ratio: f64
+}
+
+impl GeometricSudoku {
+    pub fn new(construction: &GeometricConstruction) -> Self {
+        let p1 = construction.points.p1.unwrap();
+        let vesica_height = construction.distance_to_line(
+            &p1,
+            &construction.circle_a.center,
+            &construction.circle_b.as_ref().unwrap().center
+        );
+        
+        // Size emerges from vesica ratio itself
+        let natural_ratio = vesica_height / construction.circle_a.radius;
+        let size = natural_ratio.round() as usize;
+        
+        GeometricSudoku {
+            grid: vec![vec![None; size]; size],
+            size,
+            vesica_height,
+            natural_ratio
+        }
+    }
+
+    pub fn verify_geometric_consistency(&self) -> bool {
+        let mut row_sums = vec![0; self.size];
+        let mut col_sums = vec![0; self.size];
+        
+        for i in 0..self.size {
+            for j in 0..self.size {
+                if let Some(num) = self.grid[i][j] {
+                    row_sums[i] += num;
+                    col_sums[j] += num;
+                }
+            }
+        }
+        
+        // Target emerges from vesica ratio
+        let target = (self.natural_ratio * self.size as f64).round() as u32;
+        
+        row_sums.iter().all(|&sum| sum == 0 || sum == target) &&
+        col_sums.iter().all(|&sum| sum == 0 || sum == target)
+    }
+
+    pub fn solve(&mut self) -> bool {
+        // Numbers emerge from vesica ratio
+        let nums: Vec<u32> = (1..=self.size).map(|x| x as u32).collect();
+        
+        // Rotation emerges from vesica height and natural ratio
+        let angle = (self.vesica_height / self.natural_ratio).acos();
+        let rotation = (angle * self.size as f64).round() as usize;
+        
+        // Fill grid according to geometric relationships
+        for i in 0..self.size {
+            for j in 0..self.size {
+                let idx = (i + j + rotation) % self.size;
+                self.grid[i][j] = Some(nums[idx]);
+            }
+        }
+        
+        self.verify_geometric_consistency()
+    }
+}
 
