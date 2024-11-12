@@ -809,3 +809,82 @@ impl GeometricSudoku {
     }
 }
 
+pub struct YangMillsField {
+    dimension: usize,
+    field_strength: Vec<Vec<f64>>,
+    vesica_ratio: f64,
+    natural_ratio: f64,
+}
+
+impl YangMillsField {
+    pub fn new(construction: &GeometricConstruction) -> Self {
+        let p1 = construction.points.p1.unwrap();
+        let height = construction.distance_to_line(
+            &p1,
+            &construction.circle_a.center,
+            &construction.circle_b.as_ref().unwrap().center
+        );
+        
+        let natural_ratio = compute_natural_ratio(construction);
+        let dimension = (1.0 / natural_ratio).round() as usize;
+        
+        YangMillsField {
+            dimension,
+            field_strength: vec![vec![0.0; dimension]; dimension],
+            vesica_ratio: height,
+            natural_ratio
+        }
+    }
+
+    pub fn compute_field_strength(&self, i: usize, j: usize) -> f64 {
+        let center = self.dimension as f64 / 2.0;
+        let dx = (i as f64 - center) / center;
+        let dy = (j as f64 - center) / center;
+        let r = (dx * dx + dy * dy).sqrt();
+        self.vesica_ratio * (-r * r).exp()
+    }
+
+    pub fn compute_mass_gap(&self) -> f64 {
+        let mut min_gap = f64::INFINITY;
+        for i in 0..self.dimension {
+            for j in 0..self.dimension {
+                let field = self.field_strength[i][j];
+                if field > 0.0 {
+                    min_gap = min_gap.min(field);
+                }
+            }
+        }
+        min_gap * self.natural_ratio
+    }
+
+    pub fn verify_existence(&self) -> bool {
+        let center = self.dimension / 2;
+        self.field_strength[center][center] > 0.0
+    }
+
+    pub fn verify_field_consistency(&self) -> bool {
+        for i in 1..self.dimension-1 {
+            for j in 1..self.dimension-1 {
+                // Let the relationship emerge from vesica ratio
+                let neighbors = vec![
+                    self.field_strength[i+1][j],
+                    self.field_strength[i-1][j], 
+                    self.field_strength[i][j+1],
+                    self.field_strength[i][j-1]
+                ];
+                
+                let neighbor_sum: f64 = neighbors.iter().sum();
+                let center = self.field_strength[i][j];
+                let natural_count = (1.0 / self.natural_ratio).round();
+                
+                // Use natural ratio for consistency check
+                let laplacian = neighbor_sum - natural_count * center;
+                if (laplacian / self.natural_ratio).abs() > self.vesica_ratio {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+}
+

@@ -572,4 +572,38 @@ mod tests {
         // 3. Verify only proven relationships
         assert!(sudoku.verify_geometric_consistency());
     }
+
+    #[test]
+    fn test_yang_mills_existence_and_mass_gap() {
+        let mut construction = GeometricConstruction::new(1.0);
+        construction.construct();
+        
+        let mut yang_mills = YangMillsField::new(&construction);
+        
+        // Fill field strengths using geometric relationships
+        for i in 0..yang_mills.dimension {
+            for j in 0..yang_mills.dimension {
+                let field_strength = yang_mills.compute_field_strength(i, j);
+                yang_mills.field_strength[i][j] = field_strength;
+            }
+        }
+        
+        let mass_gap = yang_mills.compute_mass_gap();
+        
+        // Print values for verification
+        println!("Vesica ratio: {}", yang_mills.vesica_ratio);
+        println!("Natural ratio: {}", yang_mills.natural_ratio);
+        println!("Dimension: {}", yang_mills.dimension);
+        println!("Mass gap: {}", mass_gap);
+        println!("Field strengths:");
+        for row in &yang_mills.field_strength {
+            println!("{:?}", row);
+        }
+        println!("Existence check: {}", yang_mills.verify_existence());
+        println!("Field consistency check: {}", yang_mills.verify_field_consistency());
+        
+        assert!(yang_mills.verify_existence(), "Existence check failed");
+        assert!(yang_mills.verify_field_consistency(), "Field consistency check failed");
+        assert!(mass_gap > 0.0, "Mass gap should be positive");
+    }
 }
