@@ -8,8 +8,6 @@ mod tests {
         (p.x - 0.5).abs() < 1e-10
     }
 
-
-
     // Shared verification functions
     fn verify_circle_points(p: &Point, c1: &Circle, c2: &Circle) -> bool {
         let d1 = distance(p, &c1.center);
@@ -23,7 +21,6 @@ mod tests {
         let ratio = if next_side != 0.0 { side / next_side } else { 0.0 };
         (ratio - 1.0).abs() < 1e-10
     }
-
 
     fn verify_zero_symmetry(p1: &Point, p2: &Point) -> bool {
         verify_critical_line(p1) && 
@@ -605,5 +602,71 @@ mod tests {
         assert!(yang_mills.verify_existence(), "Existence check failed");
         assert!(yang_mills.verify_field_consistency(), "Field consistency check failed");
         assert!(mass_gap > 0.0, "Mass gap should be positive");
+    }
+
+    #[test]
+    fn test_navier_stokes_geometric_invariants() {
+        let mut construction = GeometricConstruction::new(1.0);
+        construction.construct();
+        
+        let mut fluid = crate::navier::NavierStokesField::new(&construction);
+        
+        if let Some(p1) = construction.points.p1 {
+            let height = construction.distance_to_line(
+                &p1,
+                &construction.circle_a.center,
+                &construction.circle_b.as_ref().unwrap().center
+            );
+            
+            let size = fluid.velocity_field.len();
+            for i in 0..size {
+                for j in 0..size {
+                    for k in 0..size {
+                        let x = i as f64 * height / size as f64;
+                        let y = j as f64 * height / size as f64;
+                        let z = k as f64 * height / size as f64;
+                        
+                        fluid.velocity_field[i][j][k] = (
+                            y * (1.0 - x/height),
+                            -x * (1.0 - y/height),
+                            z * (1.0 - z/height)
+                        );
+                    }
+                }
+            }
+            
+            // Only verify geometric invariants are maintained
+            assert!(fluid.verify_geometric_invariants());
+            
+            for _ in 0..100 {
+                fluid.solve_step(fluid.natural_ratio);
+                assert!(fluid.verify_geometric_invariants());
+                let _flow_ratio = compute_fluid_ratio(&fluid);
+                // No assumptions about what the ratio should be
+                // Only verify geometric invariants are maintained
+                assert!(fluid.verify_geometric_invariants());
+            }
+        }
+    }
+
+    fn compute_fluid_ratio(fluid: &crate::navier::NavierStokesField) -> f64 {
+        let size = fluid.velocity_field.len();
+        let mut total_flow = 0.0;
+        let mut total_height = 0.0;
+        
+        // Let relationships emerge through pure distances
+        for i in 0..size {
+            for j in 0..size {
+                for k in 0..size {
+                    let (u, v, w) = fluid.velocity_field[i][j][k];
+                    let flow_distance = (u*u + v*v + w*w).sqrt();
+                    total_flow += flow_distance;
+                    total_height += fluid.vesica_height;
+                }
+            }
+        }
+        
+        // Natural ratio emerges from vesica geometry
+        total_flow / total_height
     }
 }
