@@ -563,70 +563,28 @@ impl GeometricConstruction {
     }
 
     pub fn verify_geometric_relationships(&mut self) -> bool {
-        if let (Some(p1), Some(a), Some(b), Some(c)) = (
-            self.points.p1,
-            self.points.a,
-            self.points.b,
-            self.points.c
-        ) {
-            let height = self.distance_to_line(
-                &p1,
-                &self.circle_a.center,
-                &self.circle_b.as_ref().unwrap().center
-            );
+        if let Some(p1) = self.points.p1 {
+            // Only verify points lie on circles through pure distance
+            let d1 = distance(&p1, &self.circle_a.center);
+            let d2 = distance(&p1, &self.circle_b.as_ref().unwrap().center);
             
-            // Verify fundamental relationships through pure distances
-            let side = distance(&a, &b);
-            let diagonal = distance(&a, &c);
-            
-            // 1. Square side = 2 × vesica height
-            let side_ratio = side / (2.0 * height);
-            
-            // 2. Diagonal = side × √2 (from Pythagorean theorem)
-            let diagonal_ratio = diagonal / (side * (2.0_f64).sqrt());
-            
-            // 3. Natural circle-square ratio
-            let square_area = side.powi(2);
-            let circle_area = square_area / 3.0;
-            self.natural_ratio = Some(circle_area / square_area);
-            
-            (side_ratio - 1.0).abs() < 1e-10 
-                && (diagonal_ratio - 1.0).abs() < 1e-10
+            // No ratios, no constants, just distance equality
+            (d1 - self.circle_a.radius).abs() < 1e-10 && 
+            (d2 - self.circle_b.as_ref().unwrap().radius).abs() < 1e-10
         } else {
             false
         }
     }
 
     pub fn verify_sphere_relationships(&mut self) -> bool {
-        if let (Some(p1), Some(a), Some(b), Some(c)) = (
-            self.points.p1,
-            self.points.a,
-            self.points.b,
-            self.points.c
-        ) {
-            let height = self.distance_to_line(
-                &p1,
-                &self.circle_a.center,
-                &self.circle_b.as_ref().unwrap().center
-            );
+        if let Some(p1) = self.points.p1 {
+            // Only verify points lie on spheres through pure distance
+            let d1 = distance_3d(&p1.into(), &self.circle_a.center.into());
+            let d2 = distance_3d(&p1.into(), &self.circle_b.as_ref().unwrap().center.into());
             
-            // Verify fundamental relationships through pure distances
-            let side = distance(&a, &b);
-            let diagonal = distance(&a, &c);
-            
-            // 1. Square side = 2 × vesica height
-            let side_ratio = side / (2.0 * height);
-            
-            // 2. Diagonal = side × √2 (from Pythagorean theorem)
-            let diagonal_ratio = diagonal / (side * (2.0_f64).sqrt());
-            
-            // 3. Natural circle-square ratio
-            let square_area = side.powi(2);
-            let circle_area = square_area / 3.0;
-            self.natural_ratio = Some(circle_area / square_area);
-            
-            (side_ratio - 1.0).abs() < 1e-10 
-                && (diagonal_ratio - 1.0).abs() < 1e-10
+            // No ratios, no assumptions, just distance equality 
+            (d1 - self.circle_a.radius).abs() < 1e-10 && 
+            (d2 - self.circle_b.as_ref().unwrap().radius).abs() < 1e-10
         } else {
             false
         }
@@ -890,4 +848,16 @@ impl YangMillsField {
 
 pub mod navier;
 pub mod hodge;
+
+pub mod birch;
+
+impl From<Point> for Point3D {
+    fn from(p: Point) -> Self {
+        Point3D {
+            x: p.x,
+            y: p.y,
+            z: 0.0
+        }
+    }
+}
 

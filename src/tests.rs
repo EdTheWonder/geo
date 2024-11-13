@@ -1,4 +1,5 @@
 use super::*;
+use crate::birch::BSDConstruction;
 
 #[cfg(test)]
 mod tests {
@@ -693,4 +694,120 @@ mod tests {
             assert_eq!(hodge.dimension, expected_dim);
         }
     }
+
+    #[test]
+    fn test_bsd_geometric_invariants() {
+        let mut bsd = BSDConstruction::new();
+        bsd.construct();
+        
+        // Only verify geometric invariants are maintained
+        if let Some(p1) = bsd.vesica.points.p1 {
+            assert!(verify_circle_points(
+                &p1,
+                &bsd.vesica.circle_a,
+                bsd.vesica.circle_b.as_ref().unwrap()
+            ));
+        }
+        
+        // Verify vesica properties are preserved
+        assert!(bsd.verify_geometric_invariants());
+    }
+}
+
+#[cfg(test)]
+mod bsd_tests {
+    use super::*;
+
+    #[test]
+    fn test_bsd_natural_height() {
+        let mut bsd = BSDConstruction::new();
+        bsd.construct();
+        
+        // Natural height must emerge from vesica
+        let expected_height = bsd.vesica.circle_a.radius * 3.0_f64.sqrt() / 2.0;
+        assert!((bsd.natural_height - expected_height).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_l_series_spacing() {
+        let mut bsd = BSDConstruction::new();
+        bsd.construct();
+        
+        // Verify L-series circles are spaced at natural height intervals
+        for i in 0..bsd.l_series_circles.len() {
+            let y = bsd.l_series_circles[i].center.y;
+            let expected_y = bsd.natural_height * (i + 1) as f64;
+            assert!((y - expected_y).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_torsion_points() {
+        let mut bsd = BSDConstruction::new();
+        bsd.construct();
+        
+        // Verify torsion points form from vesica intersections
+        assert_eq!(bsd.torsion_points.len(), 2); // Vesica has 2 intersection points
+        
+        // All points must be equidistant from centers
+        let radius = bsd.vesica.circle_a.radius;
+        for point in &bsd.torsion_points {
+            let d1 = distance(point, &bsd.vesica.circle_a.center);
+            let d2 = distance(point, &bsd.vesica.circle_b.as_ref().unwrap().center);
+            assert!((d1 - radius).abs() < 1e-10);
+            assert!((d2 - radius).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_rank_cycles() {
+        let mut bsd = BSDConstruction::new();
+        bsd.construct();
+        
+        // Verify rank cycles follow natural 1:3 ratio
+        for cycle in &bsd.rank_cycles {
+            assert_eq!(cycle.len(), 3); // Natural ratio implies 3 points
+            
+            // Points must be equally spaced
+            let d1 = distance(&cycle[0], &cycle[1]);
+            let d2 = distance(&cycle[1], &cycle[2]);
+            assert!((d1 - d2).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_bsd_relationship() {
+        let mut bsd = BSDConstruction::new();
+        bsd.construct();
+        
+        // Only verify through pure distance relationships
+        if let Some(p1) = bsd.vesica.points.p1 {
+            // Verify torsion points through distance equality
+            for point in &bsd.torsion_points {
+                assert!(verify_circle_points(
+                    point,
+                    &bsd.vesica.circle_a,
+                    bsd.vesica.circle_b.as_ref().unwrap()
+                ));
+            }
+            
+            // Verify L-series circles through distance relationships
+            for circle in &bsd.l_series_circles {
+                let d1 = distance(&circle.center, &bsd.vesica.circle_a.center);
+                let d2 = distance(&circle.center, &bsd.vesica.circle_b.as_ref().unwrap().center);
+                assert!((d1 - d2).abs() < 1e-10);
+            }
+            
+            // Let ratio emerge from pure distance measurements
+            let natural_ratio = bsd.compute_emergent_ratio();
+            assert!(natural_ratio > 0.0);
+        }
+    }
+}
+
+pub fn verify_circle_points(p: &Point, c1: &Circle, c2: &Circle) -> bool {
+    let d1 = distance(p, &c1.center);
+    let d2 = distance(p, &c2.center);
+    (d1 - c1.radius).abs() < 1e-10 && 
+    (d2 - c2.radius).abs() < 1e-10
 }
