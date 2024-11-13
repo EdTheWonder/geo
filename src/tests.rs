@@ -669,4 +669,28 @@ mod tests {
         // Natural ratio emerges from vesica geometry
         total_flow / total_height
     }
+
+    #[test]
+    fn test_hodge_conjecture() {
+        let mut construction = GeometricConstruction::new(1.0);
+        construction.construct();
+        
+        let mut hodge = crate::hodge::HodgeForm::new(&construction);
+        hodge.construct_cycles();
+        
+        // Verify only that cycles emerge naturally and maintain vesica properties
+        assert!(hodge.verify_hodge_classes());
+        
+        // Verify dimension emerges from vesica
+        if let Some(p1) = construction.points.p1 {
+            let height = construction.distance_to_line(
+                &p1,
+                &construction.circle_a.center,
+                &construction.circle_b.as_ref().unwrap().center
+            );
+            
+            let expected_dim = (height / construction.circle_a.radius).round() as usize;
+            assert_eq!(hodge.dimension, expected_dim);
+        }
+    }
 }

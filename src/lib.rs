@@ -889,4 +889,5 @@ impl YangMillsField {
 }
 
 pub mod navier;
+pub mod hodge;
 
